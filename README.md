@@ -18,6 +18,10 @@
 - **Optimizer**: Adam (learning rate 1e-4 for initial training, 1e-5 for fine-tuning).
 - **Loss Function**: Binary crossentropy.
 - **Metrics**: Accuracy.
+- ![image](https://github.com/user-attachments/assets/9cabad2a-3741-4f14-8aba-45c76605aa68)
+- ![image](https://github.com/user-attachments/assets/efb9dc03-7a45-45cc-9b67-a5834fd88ae0)
+- ![image](https://github.com/user-attachments/assets/b4f692bc-8d2a-4d3b-b35d-aa1f2ff90294)
+
 
 ## 3. Training Process
 ### Part 1: Initial Training (20 Epochs)
