@@ -20,7 +20,8 @@
 - **Metrics**: Accuracy.
 - ![image](https://github.com/user-attachments/assets/9cabad2a-3741-4f14-8aba-45c76605aa68)
 - ![image](https://github.com/user-attachments/assets/efb9dc03-7a45-45cc-9b67-a5834fd88ae0)
-- ![image](https://github.com/user-attachments/assets/b4f692bc-8d2a-4d3b-b35d-aa1f2ff90294)
+- <img width="783" alt="image" src="https://github.com/user-attachments/assets/ddc45c3e-a5ae-4dd7-945c-0c7b1c0f2d3a">
+
 
 
 ## 3. Training Process
