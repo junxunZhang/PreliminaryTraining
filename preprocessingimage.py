@@ -1,76 +1,124 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
-# Load the original image
-image = cv2.imread('/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/SimulateDialysate/predict/IMG_5834u.JPG')
-gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-# Apply GaussianBlur to reduce noise
-blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+def detect_dialysate_region(image_path, window_size=250):
+    # Load image
+    img = cv2.imread(image_path)
+    
+    if img is None:
+        print(f"Error: Unable to load image from {image_path}")
+        return
+    
+    # Convert to HSV color space
+    hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    
+    # Use OpenCV's built-in ROI selector to select the dialysate area manually
+    roi = cv2.selectROI("Select Dialysate Area", img)
+    
+    # Check if ROI is valid (width and height should be greater than 0)
+    if roi[2] == 0 or roi[3] == 0:
+        print("Error: Invalid ROI selected. Please select a valid region.")
+        return
+    
+    # Extract the ROI region from the HSV image
+    roi_hsv = hsv_img[int(roi[1]):int(roi[1]+roi[3]), int(roi[0]):int(roi[0]+roi[2])]
+    
+    # Check if the selected ROI is valid (non-zero size array)
+    if roi_hsv.size == 0:
+        print("Error: The selected ROI is empty. Please select a valid region.")
+        return
+    
+    # Calculate the minimum and maximum HSV values within the selected region
+    min_hue = np.min(roi_hsv[:, :, 0])
+    max_hue = np.max(roi_hsv[:, :, 0])
 
-# Adaptive thresholding to detect the main sample area (the dialysate bag)
-thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    min_saturation = np.min(roi_hsv[:, :, 1])
+    max_saturation = np.max(roi_hsv[:, :, 1])
 
-# Use morphological operations to clean up noise in the thresholded image
-kernel = np.ones((5, 5), np.uint8)
-cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    min_value = np.min(roi_hsv[:, :, 2])
+    max_value = np.max(roi_hsv[:, :, 2])
 
-# Find contours to detect the main dialysate bag
-contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-largest_contour = max(contours, key=cv2.contourArea)
+    # Print out the HSV bounds
+    print(f"Lower Bound HSV: [{min_hue}, {min_saturation}, {min_value}]")
+    print(f"Upper Bound HSV: [{max_hue}, {max_saturation}, {max_value}]")
+    
+    # Close the ROI window
+    cv2.destroyAllWindows()
 
-# Create a mask for the detected sample area
-mask = np.zeros_like(gray)
-cv2.drawContours(mask, [largest_contour], -1, 255, thickness=cv2.FILLED)
+    # Split the HSV image into individual channels
+    hue, saturation, value = cv2.split(hsv_img)
 
-# Mask the original image to isolate the sample area and avoid the background
-sample_region = cv2.bitwise_and(image, image, mask=mask)
+    # Display the original image and each channel using Matplotlib
+    plt.figure(figsize=(10, 8))
 
-# --- Bubble Detection ---
-sample_gray = cv2.cvtColor(sample_region, cv2.COLOR_BGR2GRAY)
-params = cv2.SimpleBlobDetector_Params()
-params.filterByArea = True
-params.minArea = 20  # Lowered area threshold to detect smaller bubbles
-params.filterByCircularity = True
-params.minCircularity = 0.7  # Adjust circularity to detect less perfect bubbles
-params.filterByInertia = True
-params.minInertiaRatio = 0.3
-detector = cv2.SimpleBlobDetector_create(params)
-keypoints = detector.detect(sample_gray)
+    # Original image in BGR format
+    plt.subplot(2, 2, 1)
+    plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    plt.title("Original Image")
+    plt.axis('off')
 
-# Detect reflections using Canny edge detection and thresholding
-gray_sample = cv2.cvtColor(sample_region, cv2.COLOR_BGR2GRAY)
-_, reflections_mask = cv2.threshold(gray_sample, 180, 255, cv2.THRESH_BINARY)
-edges = cv2.Canny(gray_sample, 50, 150)
-reflection_mask = cv2.bitwise_or(reflections_mask, edges)
+    # Hue channel
+    plt.subplot(2, 2, 2)
+    plt.imshow(hue, cmap='hsv')
+    plt.title("Hue Channel")
+    plt.axis('off')
 
-# --- Combine Bubble and Reflection Masks ---
-bubble_mask = np.zeros_like(gray_sample)
-for kp in keypoints:
-    cv2.circle(bubble_mask, (int(kp.pt[0]), int(kp.pt[1])), int(kp.size/2), 255, thickness=cv2.FILLED)
+    # Saturation channel
+    plt.subplot(2, 2, 3)
+    plt.imshow(saturation, cmap='gray')
+    plt.title("Saturation Channel")
+    plt.axis('off')
 
-combined_mask = cv2.bitwise_or(bubble_mask, reflection_mask)
+    # Value channel (brightness)
+    plt.subplot(2, 2, 4)
+    plt.imshow(value, cmap='gray')
+    plt.title("Value Channel")
+    plt.axis('off')
 
-# --- Fixed-Size Square Segmentation Inside the Masked Region ---
-patch_size = 100  # Define the size of the square patch
-height, width = sample_region.shape[:2]
+    # Show the plots
+    plt.tight_layout()
+    plt.show()
 
-patch_count = 1
-for y in range(0, height, patch_size):
-    for x in range(0, width, patch_size):
-        # Ensure we don't exceed image bounds
-        if y + patch_size <= height and x + patch_size <= width:
-            patch = sample_region[y:y + patch_size, x:x + patch_size]
+    # Step 1: Create a Mask to Isolate the Dialysate Region
+    lower_bound = np.array([min_hue, min_saturation, min_value])  # Calculated lower bound for dialysate color
+    upper_bound = np.array([max_hue, max_saturation, max_value])  # Calculated upper bound for dialysate color
 
-            # Check if the patch contains bubbles or reflections by using the combined mask
-            patch_mask = combined_mask[y:y + patch_size, x:x + patch_size]
+    mask = cv2.inRange(hsv_img, lower_bound, upper_bound)
+
+    # Apply morphological operations to clean up the mask
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+    # Step 2: Use the Mask to Restrict Segmentation to the Dialysate Region
+    h, w = img.shape[:2]
+    clean_squares = []
+    
+    for y in range(0, h - window_size, window_size):
+        for x in range(0, w - window_size, window_size):
+            # Check if the square is within the masked region (dialysate)
+            square_mask = mask[y:y + window_size, x:x + window_size]
             
-            # Only consider patches that are fully inside the sample mask (avoid background)
-            sample_mask_patch = mask[y:y + patch_size, x:x + patch_size]
-            if np.sum(patch_mask) == 0 and np.sum(sample_mask_patch) > 0:  # If no bubbles/reflections & inside mask
-                cv2.imshow(f'Clean Patch {patch_count}', patch)
-                patch_count += 1
+            if np.all(square_mask > 0):  # Ensure the entire square is within the mask
+                square = img[y:y + window_size, x:x + window_size]
+                
+                # Perform further checks for glossiness and bubbles here (if needed)
+                # If valid, add the clean square to the list
+                clean_squares.append(square)
+                # Optionally, mark the valid regions on the original image
+                cv2.rectangle(img, (x, y), (x + window_size, y + window_size), (0, 255, 0), 2)
+    
+    # Step 3: Display and Save the Results
+    cv2.imshow('Detected Dialysate Region', img)
+    cv2.waitKey(0)
+    
+    # Save clean squares (you can adjust this if needed)
+    for idx, square in enumerate(clean_squares):
+        cv2.imshow(f'clean_glossy_region_{idx}.png', square)
+    
+    return clean_squares
 
-# Wait for key press to close windows
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+
+# Example usage
+clean_squares = detect_dialysate_region('/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/SimulateDialysate/train_set/uninfected/IMG_5818.JPG')
