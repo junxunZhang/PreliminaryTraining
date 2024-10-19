@@ -1,4 +1,3 @@
-#importing libraries
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, GlobalAveragePooling2D
@@ -12,8 +11,10 @@ import matplotlib.pyplot as plt
 np.random.seed(40)
 tf.random.set_seed(40)
 
-# Define paths to the dataset
-train_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/SimulateDialysate/train_set'
+# Define paths to the new dataset (3tvt255x255 folder)
+train_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/3tvt255x255/training_set'
+valid_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/3tvt255x255/validation_set'
+test_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/3tvt255x255/test_set'
 
 # Data Augmentation for training and validation
 train_datagen = ImageDataGenerator(
@@ -25,31 +26,42 @@ train_datagen = ImageDataGenerator(
     zoom_range=0.3,
     brightness_range=[0.7, 1.3],
     horizontal_flip=True,
-    fill_mode='nearest',
-    validation_split=0.2  # 20% validation data
+    fill_mode='nearest'
 )
 
-# Load the data from the folders: infectedcuted and uninfectedcuted
+# No data augmentation for the validation and test sets, only rescaling
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+# Load the data from the folders: infected and uninfected for training
 train_generator = train_datagen.flow_from_directory(
     train_path,
-    target_size=(300, 300),
+    target_size=(255, 255),
     batch_size=32,
-    class_mode='binary',
-    subset='training'
+    class_mode='binary'
 )
 
-valid_generator = train_datagen.flow_from_directory(
-    train_path,
-    target_size=(300, 300),
+# Load validation data
+valid_generator = test_datagen.flow_from_directory(
+    valid_path,
+    target_size=(255, 255),
     batch_size=32,
     class_mode='binary',
-    subset='validation'
+    shuffle=False  # must be False to get the correct order of predictions
+)
+
+# Load test data
+test_generator = test_datagen.flow_from_directory(
+    test_path,
+    target_size=(255, 255),
+    batch_size=32,
+    class_mode='binary',
+    shuffle=False
 )
 
 # Define a more complex CNN model with more filters
 model = Sequential([
     # First block
-    Conv2D(64, (3, 3), activation='relu', input_shape=(300, 300, 3)),
+    Conv2D(64, (3, 3), activation='relu', input_shape=(255, 255, 3)),
     MaxPooling2D(pool_size=(2, 2)),
 
     # Second block with more filters
@@ -108,7 +120,7 @@ plt.title('Model Accuracy')
 plt.xlabel('Epochs')
 plt.ylabel('Accuracy')
 plt.legend()
-plt.xticks(epochs, [f'{e:.1f}' for e in epochs])  # Show epochs with one decimal
+plt.xticks(epochs)
 plt.show()
 
 # Plot loss
@@ -118,14 +130,14 @@ plt.title('Model Loss')
 plt.xlabel('Epochs')
 plt.ylabel('Loss')
 plt.legend()
-plt.xticks(epochs, [f'{e:.1f}' for e in epochs])  # Show epochs with one decimal
+plt.xticks(epochs)
 plt.show()
 
-# Evaluate the model on validation data
-valid_generator.reset()  # Reset the validation generator
-preds = model.predict(valid_generator)
+# Evaluate the model on test data
+test_generator.reset()  # Reset the test generator
+preds = model.predict(test_generator)
 y_pred = np.round(preds).astype(int)
-y_true = valid_generator.classes
+y_true = test_generator.classes
 
 # Print the confusion matrix and classification report
 print('Confusion Matrix')
@@ -134,18 +146,33 @@ print(confusion_matrix(y_true, y_pred))
 print('Classification Report')
 print(classification_report(y_true, y_pred))
 
+# Save the model
+model.save('CNNModel101824')
+
+
+
+
+
+# Load the model later (if needed)
+# model = tf.keras.models.load_model('CNNModel101324')
+
+
 
 
 '''
-# Save the model
-model.save('cnn_model.h5')
+# Load the model from the saved file
+from tensorflow.keras.models import load_model
 
-# Load the model later (if needed)
-# model = tf.keras.models.load_model('cnn_model.h5')
+# Load the saved model
+model = load_model('cnn_model.h5')
+
+# Make predictions with the loaded model
+preds = model.predict(valid_generator)
+'''
 
 
 
-
+'''
 import os
 from tensorflow.keras.preprocessing import image
 

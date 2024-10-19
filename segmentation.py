@@ -36,7 +36,7 @@ def mouse_crop(event, x, y, flags, param):
         print(f"選取範圍的大小：寬度 {width}, 高度 {height}")
 
 # 讀取圖片
-image = cv2.imread('85AA4EA3-B7A3-4EE9-82F4-5A97AC17451D_1_105_c.jpeg')
+image = cv2.imread('IMG_5977.JPG')
 clone = image.copy()
 
 cv2.namedWindow("image")
