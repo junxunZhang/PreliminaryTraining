@@ -11,15 +11,15 @@ import matplotlib.pyplot as plt
 np.random.seed(40)
 tf.random.set_seed(40)
 
-# Define paths to the new dataset (3tvt255x255 folder)
-train_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/3tvt255x255/training_set'
-valid_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/3tvt255x255/validation_set'
+# Define paths to the dataset
+train_val_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/3tvt255x255/training_set'
 test_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/3tvt255x255/test_set'
 
-# Data Augmentation for training and validation
-train_datagen = ImageDataGenerator(
+# Data Augmentation for training and validation (from training_set)
+train_val_datagen = ImageDataGenerator(
     rescale=1./255,
-    rotation_range=40,  # Increased rotation for variety
+    validation_split=0.2,  # Use 20% of training_set for validation
+    rotation_range=40,
     width_shift_range=0.3,
     height_shift_range=0.3,
     shear_range=0.3,
@@ -29,24 +29,24 @@ train_datagen = ImageDataGenerator(
     fill_mode='nearest'
 )
 
-# No data augmentation for the validation and test sets, only rescaling
+# No augmentation for test set, only rescaling
 test_datagen = ImageDataGenerator(rescale=1./255)
 
-# Load the data from the folders: infected and uninfected for training
-train_generator = train_datagen.flow_from_directory(
-    train_path,
-    target_size=(255, 255),
-    batch_size=32,
-    class_mode='binary'
-)
-
-# Load validation data
-valid_generator = test_datagen.flow_from_directory(
-    valid_path,
+# Load the training and validation data (split from training_set)
+train_generator = train_val_datagen.flow_from_directory(
+    train_val_path,
     target_size=(255, 255),
     batch_size=32,
     class_mode='binary',
-    shuffle=False  # must be False to get the correct order of predictions
+    subset='training'  # Training subset
+)
+
+valid_generator = train_val_datagen.flow_from_directory(
+    train_val_path,
+    target_size=(255, 255),
+    batch_size=32,
+    class_mode='binary',
+    subset='validation'  # Validation subset
 )
 
 # Load test data
@@ -58,34 +58,23 @@ test_generator = test_datagen.flow_from_directory(
     shuffle=False
 )
 
-# Define a more complex CNN model with more filters
+# Model definition (unchanged)
 model = Sequential([
-    # First block
     Conv2D(64, (3, 3), activation='relu', input_shape=(255, 255, 3)),
     MaxPooling2D(pool_size=(2, 2)),
-
-    # Second block with more filters
     Conv2D(128, (3, 3), activation='relu'),
     MaxPooling2D(pool_size=(2, 2)),
-
-    # Third block with even more filters
     Conv2D(256, (3, 3), activation='relu'),
     MaxPooling2D(pool_size=(2, 2)),
-
-    # Fourth block with even more filters
     Conv2D(512, (3, 3), activation='relu'),
     MaxPooling2D(pool_size=(2, 2)),
-
-    # Global average pooling instead of Flatten
     GlobalAveragePooling2D(),
-
-    # Fully connected layers
     Dense(128, activation='relu'),
-    Dropout(0.4),  # Dropout to prevent overfitting
-    Dense(1, activation='sigmoid')  # Binary classification output
+    Dropout(0.4),
+    Dense(1, activation='sigmoid')
 ])
 
-# Compile the model with a reduced learning rate
+# Compile the model (unchanged)
 model.compile(optimizer=Adam(learning_rate=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
 
 # Train the model
@@ -95,8 +84,7 @@ history = model.fit(
     validation_data=valid_generator
 )
 
-# Fine-tune the model (optional)
-# Reduce the learning rate and train for more epochs
+# Fine-tune the model (unchanged)
 model.compile(optimizer=Adam(learning_rate=1e-5), loss='binary_crossentropy', metrics=['accuracy'])
 history_finetune = model.fit(
     train_generator,
@@ -104,23 +92,20 @@ history_finetune = model.fit(
     validation_data=valid_generator
 )
 
-# Combine both training phases into one for plotting
+# Combine both training phases for plotting
 history.history['accuracy'] += history_finetune.history['accuracy']
 history.history['val_accuracy'] += history_finetune.history['val_accuracy']
 history.history['loss'] += history_finetune.history['loss']
 history.history['val_loss'] += history_finetune.history['val_loss']
 
-# Plot the training and validation accuracy and loss
-epochs = list(range(1, len(history.history['accuracy']) + 1))
-
 # Plot accuracy
+epochs = list(range(1, len(history.history['accuracy']) + 1))
 plt.plot(epochs, history.history['accuracy'], label='Train Accuracy')
 plt.plot(epochs, history.history['val_accuracy'], label='Validation Accuracy')
 plt.title('Model Accuracy')
 plt.xlabel('Epochs')
 plt.ylabel('Accuracy')
 plt.legend()
-plt.xticks(epochs)
 plt.show()
 
 # Plot loss
@@ -130,7 +115,6 @@ plt.title('Model Loss')
 plt.xlabel('Epochs')
 plt.ylabel('Loss')
 plt.legend()
-plt.xticks(epochs)
 plt.show()
 
 # Evaluate the model on test data
@@ -147,7 +131,8 @@ print('Classification Report')
 print(classification_report(y_true, y_pred))
 
 # Save the model
-model.save('CNNModel101824')
+model.save('CNNModel101824.h5')
+
 
 
 
