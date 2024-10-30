@@ -41,12 +41,16 @@ train_generator = train_val_datagen.flow_from_directory(
     subset='training'  # Training subset
 )
 
+
+# in general, vlaidation and test not need to be shuffled
 valid_generator = train_val_datagen.flow_from_directory(
     train_val_path,
     target_size=(255, 255),
     batch_size=32,
     class_mode='binary',
-    subset='validation'  # Validation subset
+    subset='validation',
+    shuffle=False
+    # Validation subset
 )
 
 # Load test data
