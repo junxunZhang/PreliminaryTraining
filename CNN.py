@@ -1,14 +1,16 @@
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
+from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, GlobalAveragePooling2D
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.optimizers import Adam
-from sklearn.model_selection import KFold
-from sklearn.metrics import classification_report, confusion_matrix
+from tensorflow.keras.callbacks import LearningRateScheduler
 import numpy as np
-import pandas as pd  # Required for DataFrame creation
+import pandas as pd
 import matplotlib.pyplot as plt
 import os
+from tensorflow.keras.layers import Input
+from tensorflow.keras.preprocessing import image
+import time
 
 # Set random seed for reproducibility
 np.random.seed(40)
@@ -19,140 +21,90 @@ train_val_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTr
 test_path = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/3tvt255x255/test_set'
 
 # Parameters
-num_folds = 5  # Number of folds (ensuring each fold has 20% validation data)
 batch_size = 32
-epochs = 20
+epochs = 30  # Total epochs (20 for initial learning rate, 10 for fine-tuning)
 
-# Prepare arrays to store metrics for each fold
-accuracy_per_fold = []
-loss_per_fold = []
-histories = []  # Store history of each fold for plotting
+# Define a learning rate schedule
+def lr_schedule(epoch):
+    return 1e-3 if epoch < 20 else 1e-5
 
-# Get list of image paths and labels
-data_generator = ImageDataGenerator(rescale=1./255)
-train_data = data_generator.flow_from_directory(
+# Add the learning rate scheduler callback
+lr_scheduler = LearningRateScheduler(lr_schedule)
+
+# Data generators
+train_val_datagen = ImageDataGenerator(
+    rescale=1./255,
+    validation_split=0.2,  # Use 20% of the data for validation
+    brightness_range=[0.7, 1.3],
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
+
+# Create train and validation data generators
+train_generator = train_val_datagen.flow_from_directory(
     train_val_path,
     target_size=(255, 255),
     batch_size=batch_size,
     class_mode='binary',
-    shuffle=True
+    subset='training'
 )
 
-# Extract image file paths and corresponding labels
-file_paths = train_data.filepaths
-labels = train_data.classes
+val_generator = train_val_datagen.flow_from_directory(
+    train_val_path,
+    target_size=(255, 255),
+    batch_size=batch_size,
+    class_mode='binary',
+    subset='validation'
+)
 
-# Define k-fold cross-validator
-kf = KFold(n_splits=num_folds, shuffle=True, random_state=40)
+# Model definition
+model = Sequential([
+    Input(shape=(255, 255, 3)),
+    Conv2D(64, (3, 3), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    Conv2D(128, (3, 3), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    Conv2D(256, (3, 3), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    Conv2D(512, (3, 3), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    GlobalAveragePooling2D(),
+    Dense(128, activation='relu'),
+    Dropout(0.4),
+    Dense(1, activation='sigmoid')
+])
 
-fold_no = 1
-for train_index, val_index in kf.split(file_paths):
-    print(f'Training for fold {fold_no} ...')
-    
-    # Split data for this fold
-    train_files = [file_paths[i] for i in train_index]
-    train_labels = [str(labels[i]) for i in train_index]  # Convert labels to strings for compatibility
-    val_files = [file_paths[i] for i in val_index]
-    val_labels = [str(labels[i]) for i in val_index]  # Convert labels to strings for compatibility
+# Compile the model
+model.compile(optimizer=Adam(learning_rate=1e-3), loss='binary_crossentropy', metrics=['accuracy'])
 
-    # Data generators for each fold
-    train_datagen = ImageDataGenerator(
-        rescale=1./255,
-        rotation_range=40,
-        width_shift_range=0.3,
-        height_shift_range=0.3,
-        shear_range=0.3,
-        zoom_range=0.3,
-        brightness_range=[0.7, 1.3],
-        horizontal_flip=True,
-        fill_mode='nearest'
-    )
+# Train the model
+history = model.fit(
+    train_generator,
+    epochs=epochs,
+    validation_data=val_generator,
+    callbacks=[lr_scheduler]  # Use the learning rate scheduler
+)
 
-    val_datagen = ImageDataGenerator(rescale=1./255)
-
-    train_generator = train_datagen.flow_from_dataframe(
-        dataframe=pd.DataFrame({'filename': train_files, 'class': train_labels}),
-        x_col='filename',
-        y_col='class',
-        target_size=(255, 255),
-        batch_size=batch_size,
-        class_mode='binary'
-    )
-
-    val_generator = val_datagen.flow_from_dataframe(
-        dataframe=pd.DataFrame({'filename': val_files, 'class': val_labels}),
-        x_col='filename',
-        y_col='class',
-        target_size=(255, 255),
-        batch_size=batch_size,
-        class_mode='binary',
-        shuffle=False
-    )
-
-    # Model definition
-    model = Sequential([
-        Conv2D(64, (3, 3), activation='relu', input_shape=(255, 255, 3)),
-        MaxPooling2D(pool_size=(2, 2)),
-        Conv2D(128, (3, 3), activation='relu'),
-        MaxPooling2D(pool_size=(2, 2)),
-        Conv2D(256, (3, 3), activation='relu'),
-        MaxPooling2D(pool_size=(2, 2)),
-        Conv2D(512, (3, 3), activation='relu'),
-        MaxPooling2D(pool_size=(2, 2)),
-        GlobalAveragePooling2D(),
-        Dense(128, activation='relu'),
-        Dropout(0.4),
-        Dense(1, activation='sigmoid')
-    ])
-
-    # Compile the model
-    model.compile(optimizer=Adam(learning_rate=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
-
-    # Train the model for the current fold
-    history = model.fit(
-        train_generator,
-        epochs=epochs,
-        validation_data=val_generator
-    )
-    
-    # Append history for later plotting
-    histories.append(history)
-    
-    # Save accuracy and loss for this fold
-    accuracy_per_fold.append(history.history['val_accuracy'][-1])
-    loss_per_fold.append(history.history['val_loss'][-1])
-
-    # Increment fold number
-    fold_no += 1
-
-# Plot accuracy and loss for each fold
-for i, history in enumerate(histories):
-    epochs_range = range(1, epochs + 1)
-    plt.plot(epochs_range, history.history['accuracy'], label=f'Train Accuracy Fold {i+1}')
-    plt.plot(epochs_range, history.history['val_accuracy'], label=f'Validation Accuracy Fold {i+1}')
-
-plt.title('Model Accuracy per Fold')
+# Plot training and validation accuracy
+epochs_range = range(1, epochs + 1)
+plt.plot(epochs_range, history.history['accuracy'], label='Train Accuracy')
+plt.plot(epochs_range, history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Model Accuracy')
 plt.xlabel('Epochs')
 plt.ylabel('Accuracy')
 plt.legend(loc='lower right')
 plt.show()
 
-for i, history in enumerate(histories):
-    plt.plot(epochs_range, history.history['loss'], label=f'Train Loss Fold {i+1}')
-    plt.plot(epochs_range, history.history['val_loss'], label=f'Validation Loss Fold {i+1}')
-
-plt.title('Model Loss per Fold')
+# Plot training and validation loss
+plt.plot(epochs_range, history.history['loss'], label='Train Loss')
+plt.plot(epochs_range, history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
 plt.xlabel('Epochs')
 plt.ylabel('Loss')
 plt.legend(loc='upper right')
 plt.show()
 
-# Print cross-validation results
-print('Cross-validation results:')
-print(f'Average Validation Accuracy: {np.mean(accuracy_per_fold):.2f} (+/- {np.std(accuracy_per_fold):.2f})')
-print(f'Average Validation Loss: {np.mean(loss_per_fold):.2f} (+/- {np.std(loss_per_fold):.2f})')
-
-# Evaluate on Test Data if required
+# Evaluate on Test Data
 test_datagen = ImageDataGenerator(rescale=1./255)
 test_generator = test_datagen.flow_from_directory(
     test_path,
@@ -162,55 +114,29 @@ test_generator = test_datagen.flow_from_directory(
     shuffle=False
 )
 
-# Aggregate results across folds
+# Evaluate the model on the test set
 test_loss, test_accuracy = model.evaluate(test_generator)
 print(f'Test Accuracy: {test_accuracy}')
 print(f'Test Loss: {test_loss}')
 
-# Save the final model if needed
-model.save('CNNModel_CrossValidation.h5')
-
-
-
-
-# Load the model later (if needed)
-# model = tf.keras.models.load_model('CNNModel101324')
-
-
+# Save the final model
+model.save('CNNModel_SingleFold.h5')
 
 
 '''
 # Load the model from the saved file
-from tensorflow.keras.models import load_model
+model = load_model('CNNModel_SingleFold.h5')
 
-# Load the saved model
-model = load_model('cnn_model.h5')
-
-# Make predictions with the loaded model
-preds = model.predict(valid_generator)
-'''
-
-
-
-'''
-import os
-from tensorflow.keras.preprocessing import image
-
-# Define the folder containing the images to predict
-predict_folder = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/SimulateDialysate/predict'
-
-
-
-# Loop through each image in the "predict" folder
+# Make predictions on new images in the "predict" folder
 for img_file in os.listdir(predict_folder):
     if img_file.endswith('.JPG'):  # Only process .JPG files
         # Set the full path to the image
         img_path = os.path.join(predict_folder, img_file)
 
         # Load and preprocess the image
-        img = image.load_img(img_path, target_size=(300, 300))  # Resize image to 300x300
+        img = image.load_img(img_path, target_size=(255, 255))  # Resize image to 255x255
         img_array = image.img_to_array(img)  # Convert image to numpy array
-        img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension (1, 300, 300, 3)
+        img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension (1, 255, 255, 3)
         img_array /= 255.0  # Normalize the image to the range [0, 1]
 
         # Make a prediction
