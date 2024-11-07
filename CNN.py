@@ -14,6 +14,7 @@ import os
 from tensorflow.keras.layers import Input
 from tensorflow.keras.preprocessing import image
 import time
+from sklearn.metrics import classification_report, confusion_matrix
 # Set random seed for reproducibility
 np.random.seed(40)
 tf.random.set_seed(40)
@@ -33,17 +34,21 @@ def lr_schedule(epoch):
 # Add the learning rate scheduler callback
 lr_scheduler = LearningRateScheduler(lr_schedule)
 
-# Data generators
-train_val_datagen = ImageDataGenerator(
+train_datagen = ImageDataGenerator(
     rescale=1./255,
-    validation_split=0.2,  # Use 20% of the data for validation
     brightness_range=[0.7, 1.3],
     horizontal_flip=True,
-    fill_mode='nearest'
+    validation_split=0.2, 
+    fill_mode='nearest' 
 )
 
-# Create train and validation data generators
-train_generator = train_val_datagen.flow_from_directory(
+val_datagen = ImageDataGenerator(
+    rescale=1./255,
+    validation_split=0.2
+)
+# validation set didn't need data augmentation
+
+train_generator = train_datagen.flow_from_directory(
     train_val_path,
     target_size=(255, 255),
     batch_size=batch_size,
@@ -51,17 +56,13 @@ train_generator = train_val_datagen.flow_from_directory(
     subset='training'
 )
 
-val_datagen = ImageDataGenerator(rescale=1./255)
-# it is not necessary to use data augmentation for validation data
-
 val_generator = val_datagen.flow_from_directory(
     train_val_path,
     target_size=(255, 255),
     batch_size=batch_size,
     class_mode='binary',
-    subset='validation',
 )
-#validation cannot shuffle!!!!!!, or the validation accuracy will very worst!!
+
 
 # Model definition
 model = Sequential([
@@ -120,14 +121,27 @@ test_generator = test_datagen.flow_from_directory(
     shuffle=False
 )
 
-# Evaluate the model on the test set
-test_loss, test_accuracy = model.evaluate(test_generator)
-print(f'Test Accuracy: {test_accuracy}')
-print(f'Test Loss: {test_loss}')
+# Predict the labels for the test data
+test_generator.reset()  # Reset generator to ensure all data is evaluated
+predictions = model.predict(test_generator)
+predicted_classes = (predictions > 0.5).astype(int).flatten()  # Convert probabilities to binary labels
+
+# Get the true labels from the test generator
+true_classes = test_generator.classes
+class_labels = list(test_generator.class_indices.keys())  # Get class labels
+
+# Print the confusion matrix
+conf_matrix = confusion_matrix(true_classes, predicted_classes)
+print("Confusion Matrix:")
+print(conf_matrix)
+
+# Print the classification report
+report = classification_report(true_classes, predicted_classes, target_names=class_labels)
+print("\nClassification Report:")
+print(report)
 
 # Save the final model
 model.save('CNNModel_SingleFold.h5')
-
 
 '''
 # Load the model from the saved file

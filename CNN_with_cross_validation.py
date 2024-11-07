@@ -111,7 +111,7 @@ for train_index, val_index in kf.split(file_paths):
     ])
 
     # Compile the model
-    model.compile(optimizer=Adam(learning_rate=1e-3), loss='binary_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=Adam(learning_rate=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
 
     # Train the model for the current fold
     history = model.fit(
