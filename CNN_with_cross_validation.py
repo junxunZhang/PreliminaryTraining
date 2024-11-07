@@ -91,7 +91,6 @@ for train_index, val_index in kf.split(file_paths):
         target_size=(255, 255),
         batch_size=batch_size,
         class_mode='binary',
-        shuffle=False
     )
 
     # Model definition

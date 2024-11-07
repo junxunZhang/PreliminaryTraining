@@ -1,4 +1,7 @@
 import tensorflow as tf
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+# using GPU acceleration to train the model
+
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, GlobalAveragePooling2D
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
@@ -11,7 +14,6 @@ import os
 from tensorflow.keras.layers import Input
 from tensorflow.keras.preprocessing import image
 import time
-
 # Set random seed for reproducibility
 np.random.seed(40)
 tf.random.set_seed(40)
@@ -26,7 +28,7 @@ epochs = 30  # Total epochs (20 for initial learning rate, 10 for fine-tuning)
 
 # Define a learning rate schedule
 def lr_schedule(epoch):
-    return 1e-3 if epoch < 20 else 1e-5
+    return 1e-4 if epoch < 20 else 1e-5
 
 # Add the learning rate scheduler callback
 lr_scheduler = LearningRateScheduler(lr_schedule)
@@ -49,13 +51,17 @@ train_generator = train_val_datagen.flow_from_directory(
     subset='training'
 )
 
-val_generator = train_val_datagen.flow_from_directory(
+val_datagen = ImageDataGenerator(rescale=1./255)
+# it is not necessary to use data augmentation for validation data
+
+val_generator = val_datagen.flow_from_directory(
     train_val_path,
     target_size=(255, 255),
     batch_size=batch_size,
     class_mode='binary',
-    subset='validation'
+    subset='validation',
 )
+#validation cannot shuffle!!!!!!, or the validation accuracy will very worst!!
 
 # Model definition
 model = Sequential([
@@ -75,7 +81,7 @@ model = Sequential([
 ])
 
 # Compile the model
-model.compile(optimizer=Adam(learning_rate=1e-3), loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(optimizer=Adam(learning_rate=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
 
 # Train the model
 history = model.fit(
