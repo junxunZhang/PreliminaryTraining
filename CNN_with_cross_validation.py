@@ -12,6 +12,7 @@ import os
 import time
 from tensorflow.keras.layers import Input
 from tensorflow.keras.preprocessing import image
+from sklearn.metrics import classification_report, confusion_matrix
 
 # Set random seed for reproducibility
 np.random.seed(40)
@@ -47,10 +48,11 @@ labels = train_data.classes
 
 # Define k-fold cross-validator
 kf = KFold(n_splits=num_folds, shuffle=True, random_state=40)
+# this one can split data into 5 parts, and each part will be used as validation set once
 
 # Define a learning rate schedule
 def lr_schedule(epoch):
-    return 1e-3 if epoch < 20 else 1e-5
+    return 1e-4 if epoch < 20 else 1e-5
 
 # Add the learning rate scheduler callback
 lr_scheduler = LearningRateScheduler(lr_schedule)
@@ -91,6 +93,7 @@ for train_index, val_index in kf.split(file_paths):
         target_size=(255, 255),
         batch_size=batch_size,
         class_mode='binary',
+        shuffle=False
     )
 
     # Model definition
@@ -112,6 +115,8 @@ for train_index, val_index in kf.split(file_paths):
 
     # Compile the model
     model.compile(optimizer=Adam(learning_rate=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+
+    model.summary()
 
     # Train the model for the current fold
     history = model.fit(
@@ -171,29 +176,69 @@ test_generator = test_datagen.flow_from_directory(
     shuffle=False
 )
 
-# Evaluate the model on the test set
-test_loss, test_accuracy = model.evaluate(test_generator)
-print(f'Test Accuracy: {test_accuracy}')
-print(f'Test Loss: {test_loss}')
+# Predict the labels for the test data
+test_generator.reset()  # Reset generator to ensure all data is evaluated
+predictions = model.predict(test_generator)
+predicted_classes = (predictions > 0.5).astype(int).flatten()  # Convert probabilities to binary labels
+
+# Get the true labels from the test generator
+true_classes = test_generator.classes
+class_labels = list(test_generator.class_indices.keys())  # Get class labels
+
+# Print the confusion matrix
+conf_matrix = confusion_matrix(true_classes, predicted_classes)
+print("Confusion Matrix:")
+print(conf_matrix)
+
+# Print the classification report
+report = classification_report(true_classes, predicted_classes, target_names=class_labels)
+print("\nClassification Report:")
+print(report)
+
 
 # Save the final model
 model.save('CNNModel_WithCrossValidation.h5')
 
 
+
+# Load the model later (if needed)
+# model = tf.keras.models.load_model('CNNModel101324')
+
+
+
+
 '''
 # Load the model from the saved file
-model = load_model('CNNModel_CrossValidation.h5')
+from tensorflow.keras.models import load_model
 
-# Make predictions on new images in the "predict" folder
+# Load the saved model
+model = load_model('cnn_model.h5')
+
+# Make predictions with the loaded model
+preds = model.predict(valid_generator)
+'''
+
+
+
+'''
+import os
+from tensorflow.keras.preprocessing import image
+
+# Define the folder containing the images to predict
+predict_folder = '/Users/zhangjinxun/Documents/Research/experiment/PreliminaryTraining/lib/SimulateDialysate/predict'
+
+
+
+# Loop through each image in the "predict" folder
 for img_file in os.listdir(predict_folder):
     if img_file.endswith('.JPG'):  # Only process .JPG files
         # Set the full path to the image
         img_path = os.path.join(predict_folder, img_file)
 
         # Load and preprocess the image
-        img = image.load_img(img_path, target_size=(255, 255))  # Resize image to 255x255
+        img = image.load_img(img_path, target_size=(300, 300))  # Resize image to 300x300
         img_array = image.img_to_array(img)  # Convert image to numpy array
-        img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension (1, 255, 255, 3)
+        img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension (1, 300, 300, 3)
         img_array /= 255.0  # Normalize the image to the range [0, 1]
 
         # Make a prediction
@@ -204,5 +249,4 @@ for img_file in os.listdir(predict_folder):
             print(f"Prediction for {img_file}: Infected")
         else:
             print(f"Prediction for {img_file}: Uninfected")
-            
 '''

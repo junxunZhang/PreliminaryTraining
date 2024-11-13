@@ -61,6 +61,7 @@ val_generator = val_datagen.flow_from_directory(
     target_size=(255, 255),
     batch_size=batch_size,
     class_mode='binary',
+    shuffle=False,
 )
 
 
